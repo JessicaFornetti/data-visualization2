@@ -1,0 +1,952 @@
+---
+title: "CA2 Data Visualization"
+author: "Jessica Fornetti"
+date: "2023-12-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+First we load the 1st data set:
+```{r}
+df1 <- read.csv("shopping_trends.csv")
+View(df1)
+```
+
+Then we load the 2nd data set:
+```{r}
+df2 <- read.csv("file.csv")
+View(df2)
+```
+
+Then we check to make sure the columns are assigned the right types
+```{r}
+str(df1)
+```
+Most of the character type columns should be factors instead, so we convert those columns to the right type:
+```{r}
+columns <- c('Gender', 'Item.Purchased', 'Category', 'Location', 'Size', 'Color', 'Season', 'Subscription.Status', 'Payment.Method', 'Shipping.Type', 'Discount.Applied', 'Promo.Code.Used', 'Preferred.Payment.Method', 'Frequency.of.Purchases')
+
+for (col in columns) {
+  df1[, col] <- as.factor(df1[, col])
+}
+
+str(df1)
+```
+
+Now we can check the types for the second data set:
+```{r}
+str(df2)
+```
+Similarly, we need to convert some character columns to factor columns:
+```{r}
+columns <- c('Gender', 'Location', 'Product_Category', 'Coupon_Status')
+
+for (col in columns) {
+  df2[, col] <- as.factor(df2[, col])
+}
+
+str(df2)
+```
+
+
+Then we need to check if our data sets contain any missing values. We count the number of missing values per column:
+```{r}
+missing_values_per_column <- sapply(df1, function(x) sum(is.na(x)))
+missing_values_per_column
+```
+The 1st data set has no missing values. We do the same thing for df2:
+```{r}
+missing_values_per_column2 <- sapply(df2, function(x) sum(is.na(x)))
+missing_values_per_column2
+```
+
+The 2nd data set has 10 columns containing missing values.
+We can get all the rows containing Nas :
+```{r}
+rows_with_nas <- df2[!complete.cases(df2), ]
+rows_with_nas
+```
+
+```{r}
+dim(df2)
+```
+There are only 431 rows containing missing values, while the entire data set has 52955 rows of data, so we can just drop these rows as we have lots of data. <br><br>
+
+However first we look at the Nas in specific columns, to get a better idea of the Nas :
+
+```{r}
+rows_with_nas_in_customerid <- df2[is.na(df2[, 'CustomerID']), ]
+rows_with_nas_in_customerid
+```
+We can notice that the 31 rows containing Nas, have Nas in all 10 columns therefore these rows are not of much use, so we can drop them.
+
+```{r}
+df2 <- df2[complete.cases(df2[, 'CustomerID']), ]
+```
+
+We check that the Nas have been removed:
+```{r}
+missing_values_per_column2 <- sapply(df2, function(x) sum(is.na(x)))
+missing_values_per_column2
+```
+
+Then lets look at the remaining 400 rows with Nas in the Discount_pct column:
+```{r}
+rows_with_nas_in_discount_pct <- df2[is.na(df2[, 'Discount_pct']), ]
+rows_with_nas_in_discount_pct
+```
+All these rows contain values in the other 20 columns, so we won't drop these rows given that they are only missing the coupon related information. <br><br>
+
+For df2, we will drop the X column as it does not provide any extra information (just an indexing column), and we will rename the columns similarly to df1's naming:
+```{r}
+df2 <- df2[, !colnames(df2) %in% 'X']
+View(df2)
+```
+
+```{r}
+new_column_names <- c("Customer.ID", "Gender", "Location", 'Tenure.Months', 'Transaction.ID', 'Transaction.Date', 'Product.SKU', 'Product.Description', 'Product.Category', 'Quantity', 'Avg.Price', 'Delivery.Charges', 'Coupon.Status', 'GST', 'Date', 'Offline.Spend', 'Online.Spend', 'Month', 'Coupon.Code', 'Disount.Pct') 
+colnames(df2) <- new_column_names
+View(df2)
+```
+
+We import the libraries needed:
+```{r}
+library(ggplot2)
+library(sqldf)
+library(maps)
+library(reshape2)
+```
+Now we move on to the exploratory analysis: <br>
+First lets concentrate on df1: <br>
+Lets look at the variables that might influence customers spending habits: Gender and Age.
+```{r}
+#Queries for df1
+#Count by gender
+gender<-sqldf("select Gender, count(Gender) as count from df1 group by Gender")
+#View(gender)
+
+ggplot(gender, aes(x = Gender, y = count, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Gender Distribution", x = "Gender", y = "Count") +
+  theme_minimal()
+```
+We can notice that the data set is unbalanced and there is 2 times more men in the data set.
+
+For age we can observe the distribution using a histogram:
+```{r}
+ggplot(df1, aes(x = Age)) +
+  geom_histogram(binwidth = 5, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Age Distribution Histogram", x = "Age", y = "Count") +
+  theme_minimal()
+
+
+```
+We can see that the data set contains a similar amount of people from different age groups (except for the older 60+ group). <br><br>
+
+So we can divide our age groups as the following:
+```{r}
+#First we get the min and max age
+min_age <- min(df1[['Age']])
+max_age <- max(df1[['Age']])
+min_age
+max_age
+
+#Count by age, we define our age groups 18 to 29, 30 to 39, ... and 60+
+age<-sqldf("select case when Age between 18 and 29 then '18-29' when Age between 30 and 39 then '30-39' when Age between 40 and 49 then '40-49' when Age between 50 and 59 then '50-59' else '60+' end as Age_Group, count(*) as count from df1 group by Age_Group")
+#View(age)
+
+ggplot(age, aes(x = Age_Group, y = count, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Age Distribution", x = "Age", y = "Count") +
+  theme_minimal()
+```
+
+When choosing these Age groups, we divide the customers evenly. <br><br>
+
+Now lets look at the top purchases by Categroy and Item purchased:
+```{r}
+#Top purchases, we count the amount of a specific item purchased and the average price for each category, ordering by the most purchased item for each category.
+top_purchases<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 group by `Item.Purchased` order by Category, count desc")
+#View(top_purchases)
+```
+
+We can plot the most purchased items for each category:
+```{r}
+top_5_clothing<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Category == 'Clothing' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_clothing)
+
+ggplot(top_5_clothing, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Most Purchased Items For Clothing", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+top_5_accessories<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Category == 'Accessories' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_accessories)
+
+ggplot(top_5_accessories, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Most Purchased Items For Accessories", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+top_3_footwear<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Category == 'Footwear' group by `Item.Purchased` order by count desc limit 3")
+#View(top_3_footwear)
+
+ggplot(top_3_footwear, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 3 Most Purchased Items For Footwear", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+We can see how this varies by Gender and Age:
+
+```{r}
+#First we look at the top 5 purchases for women:
+top_5_purchases_women<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Gender == 'Female' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_women)
+
+ggplot(top_5_purchases_women, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for Women", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Then we compare to the top 5 purchases for men:
+top_5_purchases_men<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Gender == 'Male' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_men)
+
+ggplot(top_5_purchases_men, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for Men", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+```
+The most purchased items for women are blouse, sandals, shirt, handbag and socks, while the most purchased for men are pants, jewelry, coat, dress and sweater. (Jewelry and dress might seem surprising, but they could have been bought as a gift for someone else.) <br><br>
+
+We can look at how this varies for age:
+```{r}
+#We have all the purchases in descending order for each age group
+purchases_by_age<-sqldf("select case when Age between 18 and 29 then '18-29' when Age between 30 and 39 then '30-39' when Age between 40 and 49 then '40-49' when Age between 50 and 59 then '50-59' else '60+' end as Age_Group, Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 group by Age_Group, `Item.Purchased` order by Age_Group, count desc")
+#View(purchases_by_age)
+
+#We have the top 5 purchases for the 18 to 29 age group.
+top_5_purchases_18_29<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Age between 18 and 29 group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_18_29)
+
+ggplot(top_5_purchases_18_29, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for 18 to 29", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for the 30 to 39 age group.
+top_5_purchases_30_39<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Age between 30 and 39 group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_30_39)
+
+ggplot(top_5_purchases_30_39, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for 30 to 39", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for the 40 to 49 age group.
+top_5_purchases_40_49<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Age between 40 and 49 group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_40_49)
+
+ggplot(top_5_purchases_40_49, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for 40 to 49", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for the 50 to 59 age group.
+top_5_purchases_50_59<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Age between 50 and 59 group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_50_59)
+
+ggplot(top_5_purchases_50_59, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for 50 to 59", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for the 60+ age group.
+top_5_purchases_60<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Age >= 60 group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_60)
+
+ggplot(top_5_purchases_60, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for 60+", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+We can see that the purchases change a lot depending on which age group is purchasing the items.<br><br>
+
+We can also see how the purchases vary when looking at both gender and age:
+```{r}
+#We have the top purchases for women grouped by age
+purchases_by_age_women<-sqldf("select case when Age between 18 and 29 then '18-29' when Age between 30 and 39 then '30-39' when Age between 40 and 49 then '40-49' when Age between 50 and 59 then '50-59' else '60+' end as Age_Group, Gender, Category, `Item.Purchased`, count(`Item.Purchased`),  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Gender == 'Female' group by Age_Group, `Item.Purchased` order by Age_Group, count(`Item.Purchased`) desc")
+#View(purchases_by_age_women)
+
+#And the top purchases for men grouped by age
+purchases_by_age_men<-sqldf("select case when Age between 18 and 29 then '18-29' when Age between 30 and 39 then '30-39' when Age between 40 and 49 then '40-49' when Age between 50 and 59 then '50-59' else '60+' end as Age_Group, Gender, Category, `Item.Purchased`, count(`Item.Purchased`),  avg(`Purchase.Amount..USD.`) as avg_price from df1 where Gender == 'Male' group by Age_Group, `Item.Purchased` order by Age_Group, count(`Item.Purchased`) desc")
+#View(purchases_by_age_men)
+```
+
+We can plot the following graphs by gender and age group:
+```{r}
+#For women
+#Top 5 purchases for women in the 18 to 29 age group.
+top_5_purchases_women_18_29<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where (Age between 18 and 29) and Gender == 'Female' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_women_18_29)
+
+ggplot(top_5_purchases_women_18_29, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for Women from 18 to 29", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for women in the 30 to 39 age group.
+top_5_purchases_women_30_39<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where (Age between 30 and 39) and Gender == 'Female' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_women_30_39)
+
+ggplot(top_5_purchases_women_30_39, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for Women from 30 to 39", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for women in the 40 to 49 age group.
+top_5_purchases_women_40_49<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where (Age between 40 and 49) and Gender=='Female' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_women_40_49)
+
+ggplot(top_5_purchases_women_40_49, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for Women from 40 to 49", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for women in the 50 to 59 age group.
+top_5_purchases_women_50_59<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where (Age between 50 and 59) and Gender == 'Female' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_women_50_59)
+
+ggplot(top_5_purchases_women_50_59, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for Women form 50 to 59", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for women in the 60+ age group.
+top_5_purchases_women_60<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where (Age >= 60) and Gender  == 'Female' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_women_60)
+
+ggplot(top_5_purchases_women_60, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for Women 60+", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+```{r}
+#For Men
+#Top 5 purchases for men in the 18 to 29 age group.
+top_5_purchases_men_18_29<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where (Age between 18 and 29) and Gender == 'Male' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_men_18_29)
+
+ggplot(top_5_purchases_men_18_29, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for men from 18 to 29", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for men in the 30 to 39 age group.
+top_5_purchases_men_30_39<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where (Age between 30 and 39) and Gender == 'Male' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_men_30_39)
+
+ggplot(top_5_purchases_men_30_39, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for men from 30 to 39", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for men in the 40 to 49 age group.
+top_5_purchases_men_40_49<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where (Age between 40 and 49) and Gender=='Male' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_men_40_49)
+
+ggplot(top_5_purchases_men_40_49, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for men from 40 to 49", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for men in the 50 to 59 age group.
+top_5_purchases_men_50_59<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where (Age between 50 and 59) and Gender == 'Male' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_men_50_59)
+
+ggplot(top_5_purchases_men_50_59, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for men form 50 to 59", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top 5 purchases for men in the 60+ age group.
+top_5_purchases_men_60<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 where (Age >= 60) and Gender  == 'Male' group by `Item.Purchased` order by count desc limit 5")
+#View(top_5_purchases_men_60)
+
+ggplot(top_5_purchases_men_60, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = `Item.Purchased`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Purchases for men 60+", x = "Item Purchased", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+Now we can take a look at which colors are the most popular :
+```{r}
+top_colors = sqldf("select Color, count(Color) as count from df1 group by Color order by count desc limit 6")
+#View(top_colors)
+
+ggplot(top_colors, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top Colors", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+We can see the difference by gender:
+```{r}
+top_color_women<-sqldf("select Color, count(Color) as count from df1 where Gender == 'Female' group by Color order by count(Color) desc limit 5")
+#View(top_color_women)
+
+ggplot(top_color_women, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top Colors Women", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+top_color_men<-sqldf("select Color, count(Color) as count from df1 where Gender == 'Male' group by Color order by count(Color) desc limit 5")
+#View(top_color_men)
+
+ggplot(top_color_men, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top Colors Men", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+We can look at how this varies for age:
+```{r}
+#Top colors for the 18 to 29 age group.
+top_colors_18_29<-sqldf("select Color, count(Color) as count from df1  where Age between 18 and 29 group by Color order by count(Color) desc limit 5")
+#View(top_colors_18_29)
+
+ggplot(top_colors_18_29, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top Colors for 18 to 29", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top colors for the 30 to 39 age group.
+top_colors_30_39<-sqldf("select Color, count(Color) as count from df1  where Age between 30 and 39 group by Color order by count(Color) desc limit 5")
+#View(top_colors_30_39)
+
+ggplot(top_colors_30_39, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top Colors for 30 to 39", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top colors for the 40 to 49 age group.
+top_colors_40_49<-sqldf("select Color, count(Color) as count from df1  where Age between 40 and 49 group by Color order by count(Color) desc limit 5")
+#View(top_colors_40_49)
+
+ggplot(top_colors_40_49, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top Colors for 40 to 49", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top colors for the 50 to 59 age group.
+top_colors_50_59<-sqldf("select Color, count(Color) as count from df1  where Age between 50 and 59 group by Color order by count(Color) desc limit 5")
+#View(top_colors_50_59)
+
+ggplot(top_colors_50_59, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top Colors for 50 to 59", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+#Top colors for the 60+ age group.
+top_colors_60<-sqldf("select Color, count(Color) as count from df1  where Age >= 60 group by Color order by count(Color) desc limit 5")
+#View(top_colors_60)
+
+ggplot(top_colors_60, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top Colors for 60+", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+We can look at which seasons have the most purchases:
+```{r}
+seasons = sqldf("select Season, count(Season) as count from df1 group by Season order by count desc")
+#View(seasons)
+
+ggplot(seasons, aes(x = reorder(Season, -count), y = count, fill = Season)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Season count", x = "Season", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+Spring has the most purchases.<br><br>
+
+We can see how gender influences when you purchase items:
+```{r}
+season_women<-sqldf("select Season, count(Season) as count from df1 where Gender == 'Female' group by Season order by count desc")
+#View(season_women)
+
+ggplot(season_women, aes(x = reorder(Season, -count), y = count, fill = Season)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Season count for women", x = "Season", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+season_men<-sqldf("select Season, count(Season) as count from df1 where Gender == 'Male' group by Season order by count desc")
+#View(season_men)
+
+ggplot(season_men, aes(x = reorder(Season, -count), y = count, fill = Season)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Season count for men", x = "Season", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+We can also look at how age influences when you make purchases:
+```{r}
+seasons_18_29<-sqldf("select Season, count(Season) as count from df1  where Age between 18 and 29 group by Season order by count(Season) desc")
+#View(seasons_18_29)
+
+ggplot(seasons_18_29, aes(x = reorder(Season, -count), y = count, fill = Season)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Seasons for 18 to 29", x = "Season", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+seasons_30_39<-sqldf("select Season, count(Season) as count from df1  where Age between 30 and 39 group by Season order by count(Season) desc")
+#View(seasons_30_39)
+
+ggplot(seasons_30_39, aes(x = reorder(Season, -count), y = count, fill = Season)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Seasons for 30 to 39", x = "Season", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+seasons_40_49<-sqldf("select Season, count(Season) as count from df1  where Age between 40 and 49 group by Season order by count(Season) desc")
+#View(seasons_40_49)
+
+ggplot(seasons_40_49, aes(x = reorder(Season, -count), y = count, fill = Season)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Seasons for 40 to 49", x = "Season", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+seasons_50_59<-sqldf("select Season, count(Season) as count from df1  where Age between 50 and 59 group by Season order by count(Season) desc")
+#View(seasons_50_59)
+
+ggplot(seasons_50_59, aes(x = reorder(Season, -count), y = count, fill = Season)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Seasons for 50 to 59", x = "Season", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+seasons_60<-sqldf("select Season, count(Season) as count from df1  where Age >= 60 group by Season order by count(Season) desc")
+#View(seasons_60)
+
+ggplot(seasons_60, aes(x = reorder(Season, -count), y = count, fill = Season)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Seasons for 60+", x = "Season", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+We can see the correlation between color and season by looking at which colors are the most purchased for each season:
+```{r}
+top_5_color_by_season_summer<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Summer' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_summer)
+
+ggplot(top_5_color_by_season_summer, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Summer", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+top_5_color_by_season_spring<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Spring' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_spring)
+
+ggplot(top_5_color_by_season_spring, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Spring", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+top_5_color_by_season_winter<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Winter' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_winter)
+
+ggplot(top_5_color_by_season_winter, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Winter", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+top_5_color_by_season_fall<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Fall' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_fall)
+
+ggplot(top_5_color_by_season_fall, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Fall", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+We can see the variation by gender :
+```{r}
+top_5_color_by_season_summer_women<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Summer'and Gender =='Female' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_summer_women)
+
+ggplot(top_5_color_by_season_summer_women, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Summer for Women", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+top_5_color_by_season_spring_women<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Spring' and Gender=='Female' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_spring_women)
+
+ggplot(top_5_color_by_season_spring_women, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Spring for Women", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+top_5_color_by_season_winter_women<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Winter' and Gender=='Female' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_winter_women)
+
+ggplot(top_5_color_by_season_winter_women, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Winter  for Women", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+top_5_color_by_season_fall_women<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Fall' and Gender == 'Female' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_fall_women)
+
+ggplot(top_5_color_by_season_fall_women, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Fall for Women", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+top_5_color_by_season_summer_men<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Summer'and Gender =='Male' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_summer_men)
+
+ggplot(top_5_color_by_season_summer_men, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Summer for men", x = "Color", y = "Count") + theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+top_5_color_by_season_spring_men<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Spring' and Gender=='Male' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_spring_men)
+
+ggplot(top_5_color_by_season_spring_men, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Spring for men", x = "Color", y = "Count") + theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+top_5_color_by_season_winter_men<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Winter' and Gender=='Male' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_winter_men)
+
+ggplot(top_5_color_by_season_winter_men, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Winter  for men", x = "Color", y = "Count") + theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+top_5_color_by_season_fall_men<-sqldf("select Season, Color, count(Color) as count from df1 where Season == 'Fall' and Gender == 'Male' group by Color order by count desc limit 5")
+#View(top_5_color_by_season_fall_men)
+
+ggplot(top_5_color_by_season_fall_men, aes(x = reorder(Color, -count), y = count, fill = Color)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Colors in Fall for men", x = "Color", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+To explore the correlation between colors and the season, we can also create a heat map:
+```{r}
+color_season_heatmap <- sqldf("select Color, Season, count(*) as count from df1 group by color, season")
+
+ggplot(color_season_heatmap, aes(x = Season, y = Color, fill = count)) +
+  geom_tile() +
+  labs(title = "Heatmap of Correlation between Color and Season", 
+       x = "Season", y = "Color", fill = "Count") +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") + 
+  theme_minimal()
+```
+
+Now we can look at the different reviews customers gave: (we group ratings from  0 to 1, 1.1 to 2 ... and 4.1 to 5)
+```{r}
+reviews<-sqldf("select case when `Review.Rating` between 0 and 1 then 'terrible' when `Review.Rating` between 1.1 and 2 then 'very bad' when `Review.Rating` between 2.1 and 3 then 'bad' when `Review.Rating` between 3.1 and 4 then 'okay' else 'good' end as review_rating, count(*) as review_count from df1 group by review_rating order by review_count desc")
+#View(reviews)
+
+ggplot(reviews, aes(x = reorder(review_rating, -review_count), y = review_count, fill = review_rating)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Review Ratings", x = "Review Rating", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+Most of the reviews are either okay or good, there aren't as  many bad reviews. <br><br>
+
+We can see how this differs by gender:
+```{r}
+# When we count the number of reviews, we need to scale those values(divide by the total number of reviews) as we want to compare by gender and in this data set there are more men. 
+reviews_women<-sqldf("select case when `Review.Rating` between 0 and 1 then 'terrible' when `Review.Rating` between 1.1 and 2 then 'very bad' when `Review.Rating` between 2.1 and 3 then 'bad' when `Review.Rating` between 3.1 and 4 then 'okay' else 'good' end as review_rating, count(*) / cast((select count(*) from df1 where Gender = 'Female')as float) as scaled_review_count from df1 where Gender == 'Female' group by review_rating order by scaled_review_count desc")
+#View(reviews_women)
+
+reviews_men<-sqldf("select case when `Review.Rating` between 0 and 1 then 'terrible' when `Review.Rating` between 1.1 and 2 then 'very bad' when `Review.Rating` between 2.1 and 3 then 'bad' when `Review.Rating` between 3.1 and 4 then 'okay' else 'good' end as review_rating, count(*) / cast((select count(*) from df1 where Gender = 'Male')as float) as scaled_review_count from df1 where Gender == 'Male' group by review_rating order by scaled_review_count desc")
+#View(reviews_men)
+
+#We use melt to get a bar graph with bars for each gender side by side for each type of  review
+melted_reviews <- rbind(
+  cbind(melt(reviews_women), gender = 'Female'),
+  cbind(melt(reviews_men), gender = 'Male')
+)
+
+ggplot(melted_reviews, aes(x = review_rating, y = value, fill = gender)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
+  labs(y = "Review Count") +
+  scale_fill_manual(values = c("Female" = "orange", "Male" = "hotpink")) +
+  theme_minimal()
+```
+
+We can see that the types of reviews don't vary much depending on gender.
+<br><br>
+We can see the variation for age:
+```{r}
+reviews_by_age<-sqldf("select case when `Review.Rating` between 0 and 1 then 'terrible' when `Review.Rating` between 1.1 and 2 then 'very bad' when `Review.Rating` between 2.1 and 3 then 'bad' when `Review.Rating` between 3.1 and 4 then 'okay' else 'good' end as review_rating, case when Age between 18 and 29 then '18-29' when Age between 30 and 39 then '30-39' when Age between 40 and 49 then '40-49' when Age between 50 and 59 then '50-59' else '60+' end as Age_Group, count(*) as review_count from df1 group by Age_Group, review_rating order by Age_Group, review_count desc")
+#View(reviews_by_age)
+```
+We can see that there isn't much variation per age group either. For all  age groups except 18 to 29, the number of reviews are as follows: okay, good and bad, whereas for 18 to 29 the number of reviews are in a lightly different order : good, okay and bad.<br><br>
+
+Now we can take a look at the frequency of purchase:
+```{r}
+#Frequency of purchase and average of previous purchases
+freq_purchases_and_avg_previous_purchases<-sqldf("select `Frequency.of.Purchases`, count(`Frequency.of.Purchases`) as count_freq_purchase, avg(`Previous.Purchases`) as avg_prev_purchase from df1 group by `Frequency.of.Purchases` order by count_freq_purchase desc")
+#View(freq_purchases_and_avg_previous_purchases)
+
+ggplot(freq_purchases_and_avg_previous_purchases, aes(x = `Frequency.of.Purchases`)) +
+  geom_bar(aes(y = count_freq_purchase), stat = "identity", fill = "skyblue") +
+  labs(title = "Frequency of Purchases Count", 
+       x = "Frequency of Purchases", 
+       y = "Count") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+We can see that there aren't any frequency that particularly stand out or where more people purchase items.
+<br>
+We can see if there is a difference according to gender:
+```{r}
+freq_purchases_women<-sqldf("select `Frequency.of.Purchases`, count(`Frequency.of.Purchases`) as count_freq_purchase from df1 where Gender == 'Female' group by `Frequency.of.Purchases` order by count_freq_purchase desc limit 3")
+#View(freq_purchases_women)
+
+ggplot(freq_purchases_women, aes(x = `Frequency.of.Purchases`)) +
+  geom_bar(aes(y = count_freq_purchase), stat = "identity", fill = "skyblue") +
+  labs(title = "Frequency of Purchases for Women", 
+       x = "Frequency of Purchases", 
+       y = "Count") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+freq_purchases_men<-sqldf("select `Frequency.of.Purchases`, count(`Frequency.of.Purchases`) as count_freq_purchase from df1 where Gender == 'Male' group by `Frequency.of.Purchases` order by count_freq_purchase desc limit 3")
+#View(freq_purchases_men)
+
+ggplot(freq_purchases_men, aes(x = `Frequency.of.Purchases`)) +
+  geom_bar(aes(y = count_freq_purchase), stat = "identity", fill = "skyblue") +
+  labs(title = "Frequency of Purchases for Men", 
+       x = "Frequency of Purchases", 
+       y = "Count") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+We can notice that women tend to make online clothing purchases more frequently than men do.<br><br>
+We can see if their is variation among different age groups:
+```{r}
+freq_purchases_18_29<-sqldf("select `Frequency.of.Purchases`, count(`Frequency.of.Purchases`) as count_freq_purchase from df1 where Age between 18 and 29 group by `Frequency.of.Purchases` order by count_freq_purchase desc limit 3")
+#View(freq_purchases_18_29)
+
+ggplot(freq_purchases_18_29, aes(x = `Frequency.of.Purchases`)) +
+  geom_bar(aes(y = count_freq_purchase), stat = "identity", fill = "skyblue") +
+  labs(title = "Frequency of Purchases for 18 to 29", 
+       x = "Frequency of Purchases", 
+       y = "Count") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+freq_purchases_30_39<-sqldf("select `Frequency.of.Purchases`, count(`Frequency.of.Purchases`) as count_freq_purchase from df1 where Age between 30 and 39 group by `Frequency.of.Purchases` order by count_freq_purchase desc limit 3")
+#View(freq_purchases_30_39)
+
+ggplot(freq_purchases_30_39, aes(x = `Frequency.of.Purchases`)) +
+  geom_bar(aes(y = count_freq_purchase), stat = "identity", fill = "skyblue") +
+  labs(title = "Frequency of Purchases for 30 to 39", 
+       x = "Frequency of Purchases", 
+       y = "Count") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+freq_purchases_40_49<-sqldf("select `Frequency.of.Purchases`, count(`Frequency.of.Purchases`) as count_freq_purchase from df1 where Age between 40 and 49 group by `Frequency.of.Purchases` order by count_freq_purchase desc limit 3")
+#View(freq_purchases_40_49)
+
+ggplot(freq_purchases_40_49, aes(x = `Frequency.of.Purchases`)) +
+  geom_bar(aes(y = count_freq_purchase), stat = "identity", fill = "skyblue") +
+  labs(title = "Frequency of Purchases for 40 to 49", 
+       x = "Frequency of Purchases", 
+       y = "Count") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+freq_purchases_50_59<-sqldf("select `Frequency.of.Purchases`, count(`Frequency.of.Purchases`) as count_freq_purchase from df1 where Age between 50 and 59 group by `Frequency.of.Purchases` order by count_freq_purchase desc limit 3")
+#View(freq_purchases_50_59)
+
+ggplot(freq_purchases_50_59, aes(x = `Frequency.of.Purchases`)) +
+  geom_bar(aes(y = count_freq_purchase), stat = "identity", fill = "skyblue") +
+  labs(title = "Frequency of Purchases for 50 to 59", 
+       x = "Frequency of Purchases", 
+       y = "Count") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+freq_purchases_60<-sqldf("select `Frequency.of.Purchases`, count(`Frequency.of.Purchases`) as count_freq_purchase from df1 where Age >= 60 group by `Frequency.of.Purchases` order by count_freq_purchase desc limit 3")
+#View(freq_purchases_60)
+
+ggplot(freq_purchases_60, aes(x = `Frequency.of.Purchases`)) +
+  geom_bar(aes(y = count_freq_purchase), stat = "identity", fill = "skyblue") +
+  labs(title = "Frequency of Purchases for 60+", 
+       x = "Frequency of Purchases", 
+       y = "Count") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+We can notice that there is variation for each age group,with older people buying less frequently than younger people. <br><br>
+We can also look at where each of the customers are from:
+```{r}
+location <-sqldf("select lower(Location) as Location, count(Location) as count from df1 group by Location order by count desc")
+#View(location)
+```
+We will use this query to plot a more complex visual (using the maps package) for one of our 3 visualizations.
+
+<br><br>
+Now we can move on to queries using df2:
+<br>
+We can look at the gender split in this data set:
+```{r}
+gender2 <-sqldf("select Gender, count(Gender) as count from df2 group by Gender")
+#View(gender2)
+
+ggplot(gender2, aes(x = Gender, y = count, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Gender Distribution", x = "Gender", y = "Count") +
+  theme_minimal()
+```
+This data set is also imbalanced, having more female customers. <br><br>
+
+We can which location customers are from:
+```{r}
+location2 <-sqldf("select Location, count(Location) as count from df2 group by Location order by count desc")
+#View(location2)
+```
+This data set only has customers living in 5 possible locations.
+<br><br><br>
+Now that we are have completed the exploratory analysis, we can move on to the visualizations:
+
+
+Visual 1: Top 10 most purchased items 
+```{r}
+#We get the top 10 most purhased items
+top_10_purchases<-sqldf("select Category, `Item.Purchased`, count(`Item.Purchased`) as count,  avg(`Purchase.Amount..USD.`) as avg_price from df1 group by `Item.Purchased` order by count desc limit 10")
+#View(top_10_purchases)
+
+#we plot the top 10 items in a bar chart, coloring by category
+ggplot(top_10_purchases, aes(x = `Item.Purchased`, y = count, fill = Category)) + geom_bar(stat = "identity", color = "white") +
+labs(title = "Top 10 Most Purchased Items", x = "Item Purchased", y = "Count") + scale_fill_manual(values= rainbow(length(unique(top_10_purchases$Category)))) + theme_minimal() +
+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+We can improve the visual by reordering the items in descending order and changing the colors:
+```{r}
+#we reorder the items
+top_10_purchases <- top_10_purchases[order(-top_10_purchases$count),]
+
+ggplot(top_10_purchases, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = Category)) + geom_bar(stat = "identity", color = "white") +
+labs(title = "Top 10 Most Purchased Items", x = "Item Purchased", y = "Count") + scale_fill_manual(values = c("Clothing" = "hotpink", "Accessories" = "cornflowerblue", "Outerwear" = "purple", "Footwear" = "orange")) + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+We can further improve the graph by adding a more visible border to each bar and adding text showing the count of each item:
+```{r}
+plot <- ggplot(top_10_purchases, aes(x = reorder(`Item.Purchased`, -count), y = count, fill = Category)) + geom_bar(stat = "identity", color = "black", size = 0.2) + labs(title = "Top 10 Most Purchased Items", x = "Item Purchased", y = "Count") + scale_fill_manual(values = c("Clothing" = "hotpink", "Accessories" = "cornflowerblue", "Outerwear" = "purple", "Footwear" = "orange")) + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#we add the count on top of each bar
+plot + geom_text(aes(label = count), vjust = -0.2, color = "black", size = 3)
+```
+
+Visual 2: Location of the customers
+```{r}
+#We want to know where the customers are from
+location <-sqldf("select lower(Location) as Location, count(Location) as count from df1 group by Location order by count desc")
+#View(location)
+
+#we use the map of the USA from the maps library
+us_states <- map_data("state")
+
+#We add our count column to us_states data frame that contains the latitude and longitude of each state
+merged_data <- merge(us_states, location, by.x = "region", by.y = "Location", all.x = TRUE)
+#View(merged_data)
+
+#We plot a heat map onto the map of  the USA, coloring by customer count
+ggplot() + geom_map(data = merged_data, map = merged_data, aes(x = long, y = lat, map_id = region), fill = "white", color = "black", size = 0.25) + geom_map(data = merged_data, map = merged_data, aes(fill = factor(count), map_id = region), color = "black", size = 0.5) +
+scale_fill_viridis_d() + theme_void() + coord_fixed()
+```
+
+We can adjust the legend to be on a continuous scale (to remove the unnecessary labels):
+```{r}
+ggplot() + geom_map(data = merged_data, map = merged_data, aes(x = long, y = lat, map_id = region), fill = "white", color = "black", size = 0.25) + geom_map(data = merged_data, map = merged_data, aes(fill = count, map_id = region), color = "black", size = 0.5) + labs(title = "Location of customers") + scale_fill_viridis_c() +
+theme_void() + coord_fixed()
+```
+
+I also tried to make the map interactive using the plotly and overlay bubbles for the highest count states, but the graph was not working properly. The bubbles were appearing on the state borders (maybe because of the longitude and latitude in the merged data data frame) instead of in the area of the state and I couldn't get it to work.
+
+Visual 3: Repeat Rate and Customer Traffic
+```{r}
+#We have the frequency of purchase
+freq_purchases<-sqldf("select `Frequency.of.Purchases`, count(`Frequency.of.Purchases`) as count_freq_purchase from df1 group by `Frequency.of.Purchases` order by count_freq_purchase desc")
+#View(freq_purchases)
+
+ggplot(freq_purchases, aes(x = `Frequency.of.Purchases`)) +
+  geom_bar(aes(y = count_freq_purchase), stat = "identity", fill = "skyblue") + labs(title = "Bar Chart of Frequency of Purchases", x = "Frequency of Purchases", y = "Count") + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+We can change the color used to represent each category:
+```{r}
+ggplot(freq_purchases, aes(x = `Frequency.of.Purchases`, y = count_freq_purchase, fill = `Frequency.of.Purchases`)) +
+geom_bar(stat = "identity", position = "dodge", color = "white") +
+labs(title = "Bar Chart of Frequency of Purchases", x = "Frequency of Purchases", y = "Count") +
+theme_minimal() +theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+We can try to use an area chart instead and stack the bars horizontally: 
+```{r}
+ggplot(freq_purchases, aes(x = "", y = count_freq_purchase, fill = `Frequency.of.Purchases`)) + geom_bar(stat = "identity", position = "stack", color = "white") + labs(title = "Area Chart of Frequency of Purchases", x = "Frequency of Purchases", y = "Count") + theme_minimal()
+```
+Because the count for each categories are very close in value, the variations aren't visible enough. We can try using a line chart instead:
+```{r}
+plot <- ggplot(freq_purchases, aes(x = `Frequency.of.Purchases`, y = count_freq_purchase, group = 1)) + geom_line(color = "skyblue", size = 1) + geom_point(color = "darkblue", size = 3) + labs(title = "Frequency of Purchases", x = "Frequency of Purchases", y = "Count") + theme_minimal()
+
+plot + geom_text(aes(label = count_freq_purchase), vjust = 1.5, color = "black", size = 3)
+```

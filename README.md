@@ -11,5 +11,5 @@ The main steps of the R Markdown file are outlined below:
 - Curation of 3 main visuals providing insights and answering a specific question
 
 # Repository Overview
-This repository contains a [R Markdown file](Notebook.Rmd), a [compiled version of the notebook](Notebook.html) and a [report](Report.pdf) which provides ... details the analysis and insights.
+This repository contains a [R Markdown file](Notebook.Rmd), a [compiled version of the notebook](Notebook.html) and a [report](Report.pdf) which provides extra details on the problem solved, the audience, the datasets, the user story, the pre-processing and cleaning, the data wrangling and the creation of the 3 main visulas and their previous iterations.
 
